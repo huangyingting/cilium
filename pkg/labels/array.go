@@ -14,6 +14,25 @@
 
 package labels
 
+import (
+	k8sLbls "k8s.io/apimachinery/pkg/labels"
+)
+
+type LabelArrayWithHash struct {
+	LabelArray
+	hash string
+}
+
+type LabelsWithHash interface {
+	k8sLbls.Labels
+
+	Hash() string
+}
+
+func (ls LabelArrayWithHash) Hash() string {
+	return ls.hash
+}
+
 // LabelArray is an array of labels forming a set
 type LabelArray []Label
 

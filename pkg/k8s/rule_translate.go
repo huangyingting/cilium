@@ -92,11 +92,21 @@ func (k RuleTranslator) depopulateEgress(r *api.EgressRule, result *policy.Trans
 	return nil
 }
 
+type SetWithHash struct {
+	labels.Set
+	hash string
+}
+
+func (s SetWithHash) Hash() string {
+	return s.hash
+}
+
 func (k RuleTranslator) serviceMatches(service api.Service) bool {
 	if service.K8sServiceSelector != nil {
 		es := api.EndpointSelector(service.K8sServiceSelector.Selector)
 		es.SyncRequirementsWithLabelSelector()
-		esMatches := es.Matches(labels.Set(k.ServiceLabels))
+		setWithHash := SetWithHash{Set: labels.Set(k.ServiceLabels)}
+		esMatches := es.Matches(setWithHash)
 		return esMatches &&
 			(service.K8sServiceSelector.Namespace == k.Service.Namespace || service.K8sServiceSelector.Namespace == "")
 	}
