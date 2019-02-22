@@ -53,18 +53,10 @@ int main() {
     barrier_data(&s12);
     struct metrics_value s13 = {};
     barrier_data(&s13);
-    struct proxy4_tbl_key s14 = {};
+    struct sock_key s14 = {};
     barrier_data(&s14);
-    struct proxy4_tbl_value s15 = {};
+    struct ep_config s15 = {};
     barrier_data(&s15);
-    struct proxy6_tbl_key s16 = {};
-    barrier_data(&s16);
-    struct proxy6_tbl_value s17 = {};
-    barrier_data(&s17);
-    struct sock_key s18 = {};
-    barrier_data(&s18);
-    struct ep_config s19 = {};
-    barrier_data(&s19);
 
     return 0;
 }

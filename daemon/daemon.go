@@ -70,7 +70,6 @@ import (
 	"github.com/cilium/cilium/pkg/maps/lbmap"
 	"github.com/cilium/cilium/pkg/maps/lxcmap"
 	"github.com/cilium/cilium/pkg/maps/metricsmap"
-	"github.com/cilium/cilium/pkg/maps/proxymap"
 	"github.com/cilium/cilium/pkg/maps/sockmap"
 	"github.com/cilium/cilium/pkg/maps/tunnel"
 	monitorAPI "github.com/cilium/cilium/pkg/monitor/api"
@@ -541,10 +540,6 @@ func (d *Daemon) compileBase() error {
 		"endpoint_info":        reflect.TypeOf(lxcmap.EndpointInfo{}),
 		"metrics_key":          reflect.TypeOf(metricsmap.Key{}),
 		"metrics_value":        reflect.TypeOf(metricsmap.Value{}),
-		"proxy4_tbl_key":       reflect.TypeOf(proxymap.Proxy4Key{}),
-		"proxy4_tbl_value":     reflect.TypeOf(proxymap.Proxy4Value{}),
-		"proxy6_tbl_key":       reflect.TypeOf(proxymap.Proxy6Key{}),
-		"proxy6_tbl_value":     reflect.TypeOf(proxymap.Proxy6Value{}),
 		"sock_key":             reflect.TypeOf(sockmap.SockmapKey{}),
 		"ep_config":            reflect.TypeOf(configmap.EndpointConfig{}),
 	}
