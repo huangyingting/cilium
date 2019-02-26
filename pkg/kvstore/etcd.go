@@ -149,6 +149,7 @@ func (e *etcdModule) newClient() (BackendOperations, chan error) {
 	}
 
 	for {
+		log.Debugf("connecting etcd client %+v, %+v", e.config, configPath)
 		// connectEtcdClient will close errChan when the connection attempt has
 		// been successful
 		backend, err := connectEtcdClient(e.config, configPath, errChan)
