@@ -21,7 +21,6 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/cilium/cilium/pkg/annotation"
@@ -257,10 +256,12 @@ func init() {
 // waits until all objects of the specified resource stored in Kubernetes are
 // received by the informer and processed by controller.
 // Fatally exits if syncing these initial objects fails.
-func blockWaitGroupToSyncResources(waitGroup *sync.WaitGroup, informer cache.Controller,
-	resourceName string) {
+func (d *Daemon) blockWaitGroupToSyncResources(informer cache.Controller, resourceName string) {
 
-	waitGroup.Add(1)
+	d.k8sResourceSyncWaitGroup.Add(1)
+	d.k8sResourceSyncedMu.Lock()
+	d.k8sResourceSynced[resourceName] = make(chan struct{})
+	d.k8sResourceSyncedMu.Unlock()
 	go func() {
 		scopedLog := log.WithField("kubernetesResource", resourceName)
 		scopedLog.Debug("waiting for cache to synchronize")
@@ -269,11 +270,27 @@ func blockWaitGroupToSyncResources(waitGroup *sync.WaitGroup, informer cache.Con
 			scopedLog.Fatalf("failed to wait for cache to sync")
 		}
 		scopedLog.Debug("cache synced")
-		waitGroup.Done()
+		d.k8sResourceSyncedMu.RLock()
+		c := d.k8sResourceSynced[resourceName]
+		d.k8sResourceSyncedMu.RUnlock()
+		close(c)
+		d.k8sResourceSyncWaitGroup.Done()
 	}()
 }
 
-func (d *Daemon) initK8sSubsystem() {
+func (d *Daemon) waitForCacheSync(resourceName string) chan struct{} {
+	d.k8sResourceSyncedMu.RLock()
+	c, ok := d.k8sResourceSynced[resourceName]
+	d.k8sResourceSyncedMu.RUnlock()
+	if !ok {
+		return nil
+	}
+	return c
+}
+
+// initK8sSubsystem returns a channel for which it will be closed when
+// all caches are synced
+func (d *Daemon) initK8sSubsystem() chan struct{} {
 	if err := d.EnableK8sWatcher(5 * time.Minute); err != nil {
 		log.WithError(err).Fatal("Unable to establish connection to Kubernetes apiserver")
 	}
@@ -283,15 +300,18 @@ func (d *Daemon) initK8sSubsystem() {
 	go func() {
 		log.Info("Waiting until all pre-existing resources related to policy have been received")
 		d.k8sResourceSyncWaitGroup.Wait()
-		cachesSynced <- struct{}{}
+		close(cachesSynced)
 	}()
 
-	select {
-	case <-cachesSynced:
-		log.Info("All pre-existing resources related to policy have been received; continuing")
-	case <-time.After(cacheSyncTimeout):
-		log.Fatalf("Timed out waiting for pre-existing resources related to policy to be received; exiting")
-	}
+	go func() {
+		select {
+		case <-cachesSynced:
+			log.Info("All pre-existing resources related to policy have been received; continuing")
+		case <-time.After(cacheSyncTimeout):
+			log.Fatalf("Timed out waiting for pre-existing resources related to policy to be received; exiting")
+		}
+	}()
+	return cachesSynced
 }
 
 // EnableK8sWatcher watches for policy, services and endpoint changes on the Kubernetes
@@ -373,7 +393,7 @@ func (d *Daemon) EnableK8sWatcher(reSyncPeriod time.Duration) error {
 			),
 			fields.Everything(),
 		)
-		blockWaitGroupToSyncResources(&d.k8sResourceSyncWaitGroup, policyController, "NetworkPolicy")
+		d.blockWaitGroupToSyncResources(policyController, "NetworkPolicy")
 		go policyController.Run(wait.NeverStop)
 
 		d.k8sAPIGroups.addAPI(k8sAPIGroupNetworkingV1Core)
@@ -412,7 +432,7 @@ func (d *Daemon) EnableK8sWatcher(reSyncPeriod time.Duration) error {
 		),
 		fields.Everything(),
 	)
-	blockWaitGroupToSyncResources(&d.k8sResourceSyncWaitGroup, svcController, "Service")
+	d.blockWaitGroupToSyncResources(svcController, "Service")
 	go svcController.Run(wait.NeverStop)
 	d.k8sAPIGroups.addAPI(k8sAPIGroupServiceV1Core)
 
@@ -450,7 +470,7 @@ func (d *Daemon) EnableK8sWatcher(reSyncPeriod time.Duration) error {
 		// Don't get any events from kubernetes endpoints.
 		fields.ParseSelectorOrDie("metadata.name!=kube-scheduler,metadata.name!=kube-controller-manager"),
 	)
-	blockWaitGroupToSyncResources(&d.k8sResourceSyncWaitGroup, endpointController, "Endpoint")
+	d.blockWaitGroupToSyncResources(endpointController, "Endpoint")
 	go endpointController.Run(wait.NeverStop)
 	d.k8sAPIGroups.addAPI(k8sAPIGroupEndpointV1Core)
 
@@ -488,7 +508,7 @@ func (d *Daemon) EnableK8sWatcher(reSyncPeriod time.Duration) error {
 			),
 			fields.Everything(),
 		)
-		blockWaitGroupToSyncResources(&d.k8sResourceSyncWaitGroup, ingressController, "Ingress")
+		d.blockWaitGroupToSyncResources(ingressController, "Ingress")
 		go ingressController.Run(wait.NeverStop)
 		d.k8sAPIGroups.addAPI(k8sAPIGroupIngressV1Beta1)
 	}
@@ -543,7 +563,7 @@ func (d *Daemon) EnableK8sWatcher(reSyncPeriod time.Duration) error {
 		// Wrap the controller from Kubernetes so we can actually know when all
 		// objects were synchronized and processed from kubernetes.
 		cs := &k8sUtils.ControllerSyncer{Controller: ciliumV2Controller, ResourceEventHandler: rehf}
-		blockWaitGroupToSyncResources(&d.k8sResourceSyncWaitGroup, cs, "CiliumNetworkPolicy")
+		d.blockWaitGroupToSyncResources(cs, "CiliumNetworkPolicy")
 
 		ciliumV2Controller.AddEventHandler(rehf)
 	}
