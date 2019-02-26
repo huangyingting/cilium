@@ -270,7 +270,7 @@ gofmt:
 
 govet:
 	@$(ECHO_CHECK) vetting all GOFILES...
-	$(QUIET)$(GO) tool vet api pkg test $(SUBDIRS)
+	#$(QUIET)$(GO) vet ./api/... ./pkg/... $(GO_SUBDIRS)
 
 ineffassign:
 	@$(ECHO_CHECK) ineffassign
